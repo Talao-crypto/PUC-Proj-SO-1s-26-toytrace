@@ -36,24 +36,32 @@ static void fill_event_from_regs(pid_t pid,
 
 static pid_t launch_tracee(char *const argv[])
 {
-    /*
-     * TODO Semana 2:
-     *
-     * Crie o processo monitorado.
-     *
-     * Fluxo esperado:
-     * - fork()
-     * - no filho:
-     *   - ptrace(PTRACE_TRACEME, ...)
-     *   - raise(SIGSTOP)
-     *   - execvp(argv[0], argv)
-     * - no pai:
-     *   - retornar o pid do filho
-     *
-     * Em erro, imprima uma mensagem com perror() e retorne -1.
-     */
-    fprintf(stderr, "erro: TODO Semana 2: implementar launch_tracee()\n");
-    return -1;
+    pid_t pid = fork(); /*DANDO FORK PARA CRIAR O FILHO*/
+
+    if (pid < 0)
+    {
+        perror("erro ao dar Fork");  /*pid do filho == 0*/ 
+        return -1;
+    }
+
+    if (pid == 0)
+    {
+        if (ptrace(PTRACE_TRACEME, 0, NULL, NULL) < 0 ) /*parametros: (comando(trace permite o pai rastrear), pid, addr, data)*/
+        {
+            perror("Erro ao dar o Traceme");
+            exit(1);
+        }
+
+        raise(SIGSTOP); /*filho pausa pro pai configurar o trace*/
+
+        execvp(argv[0], argv); /*Filho virando o programa que queremos seguir*/
+
+        perror("erro ao filho receber o processo");
+        exit(1);
+    }
+
+    return pid;
+    
 }
 
 static int wait_for_initial_stop(pid_t child)
@@ -132,12 +140,12 @@ int trace_program(char *const argv[],
     }
 
     child = launch_tracee(argv);
-    if (child < 0) {
+    if (child < 0) {  /*child recebe o pid do filho*/
         return -1;
     }
 
     if (wait_for_initial_stop(child) < 0) {
-        return -1;
+        return -1; /*pai recebe esse child(pid) e congela*/
     }
 
     if (configure_trace_options(child) < 0) {
