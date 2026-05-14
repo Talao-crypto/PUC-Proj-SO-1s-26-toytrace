@@ -64,18 +64,20 @@ static pid_t launch_tracee(char *const argv[])
     
 }
 
-static int wait_for_initial_stop(pid_t child)
-{
-    /*
-     * TODO Semana 2:
-     *
-     * O filho chama raise(SIGSTOP) antes de executar o programa alvo.
-     * O pai precisa esperar essa parada inicial com waitpid().
-     *
-     * Retorne 0 se o filho parou como esperado, -1 em erro.
-     */
-    fprintf(stderr, "erro: TODO Semana 2: implementar wait_for_initial_stop()\n");
-    return -1;
+static int wait_for_initial_stop(pid_t child){
+    int status;
+
+    if (waitpid(child, &status, 0) < 0){
+        perror("erro no waitpid inicial"); /*pai espera a parada inicial com waitpid */
+        return -1;
+    }
+
+    if (!WIFSTOPPED(status)){
+        fprintf(stderr, "erro: filho nao parou como esperado\n"); /*pai verifica se o filho realmente parou*/
+        return -1;
+    }
+
+    return 0;
 }
 
 static int configure_trace_options(pid_t child)
