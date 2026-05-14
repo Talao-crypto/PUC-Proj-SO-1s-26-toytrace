@@ -108,6 +108,22 @@ static int resume_until_next_syscall(pid_t child, int signal_to_deliver)
 
 static int wait_for_syscall_stop(pid_t child, int *status)
 {
+
+    waitpid(child, &status, 0);
+
+    if(WIFSTOPPED(status) && WSTOPSIG(status) == (SIGTRAP | 0x80)){
+        return 1;
+    }
+    else if(WIFEXITED(status) || WIFSIGNALED(status)){
+        return 0;
+    }
+    else {
+        fprintf(stderr, "erro: parada inesperada do filho\n");
+        return -1;
+    }
+
+    
+
     /*
      * TODO Semana 3:
      *

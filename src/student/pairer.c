@@ -5,7 +5,7 @@ int student_pair_syscall(struct syscall_pairer *pairer,
                          struct syscall_event *out)
 {
     /*
-     * TODO Semana 2:
+     * TODO Semana 5:
      *
      * O runtime chama esta funcao duas vezes para cada syscall:
      *
