@@ -3,8 +3,8 @@
 #include <errno.h>
 #include <signal.h>
 #include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
+#include <stdlib.h>
 #include <sys/ptrace.h>
 #include <sys/user.h>
 #include <sys/wait.h>
@@ -201,13 +201,18 @@ int trace_program(char *const argv[],
             return 0;
         }
 
-        /*
-         * TODO Semana 4:
-         *
-         * Use PTRACE_GETREGS para preencher regs.
-         * Depois chame fill_event_from_regs() e observer().
-         */
         memset(&regs, 0, sizeof(regs));
+
+        /*O filho esta parado em uma syscall*/
+        /*get regs: ele serve para "pegar" os registradores pq eles guardam alguamas coisas
+        como: retorno, edereço atual*/
+
+        if (ptrace(PTRACE_GETREGS, child, NULL, &regs) == -1 )
+        {
+            perror("ptrace erro no GETREGS");
+            return -1;
+        }
+
         fill_event_from_regs(child, entering, &regs, &ev);
         if (observer != NULL) {
             observer(&ev, userdata);
