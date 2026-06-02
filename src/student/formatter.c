@@ -6,13 +6,19 @@
 #include <stdio.h>
 #include <sys/syscall.h>
 
+#define CHILD_STRING_BUFSZ 256
+
+const char *student_completed_path_for_event(const struct syscall_event *ev);
+
 static void load_path_or_placeholder(const struct syscall_event *ev,
                                      unsigned long addr,
                                      char *path,
                                      size_t pathsz)
 {
-    if (ev->has_path) {
-        snprintf(path, pathsz, "%s", ev->path);
+    const char *completed_path = student_completed_path_for_event(ev);
+
+    if (completed_path != NULL) {
+        snprintf(path, pathsz, "%s", completed_path);
         return;
     }
 
@@ -71,7 +77,7 @@ void student_format_event(const struct syscall_event *ev,
      * Para caminhos do processo monitorado, use read_child_string().
      * Se a leitura falhar, imprima "<ilegivel>".
      */
-    char path[SYSCALL_EVENT_PATH_BUFSZ];
+    char path[CHILD_STRING_BUFSZ];
 
     if (ev == NULL || buf == NULL || bufsz == 0) {
         return;

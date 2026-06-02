@@ -4,7 +4,39 @@
 #include <stdio.h>
 #include <sys/syscall.h>
 
-static void capture_path_argument(struct syscall_event *ev)
+#define CHILD_STRING_BUFSZ 256
+
+static int pending_has_path;
+static pid_t pending_path_pid;
+static long pending_path_syscall_no;
+static char pending_path[CHILD_STRING_BUFSZ];
+
+static int completed_has_path;
+static pid_t completed_path_pid;
+static long completed_path_syscall_no;
+static char completed_path[CHILD_STRING_BUFSZ];
+
+const char *student_completed_path_for_event(const struct syscall_event *ev)
+{
+    if (ev == NULL || !completed_has_path) {
+        return NULL;
+    }
+
+    if (completed_path_pid != ev->pid ||
+        completed_path_syscall_no != ev->syscall_no) {
+        return NULL;
+    }
+
+    return completed_path;
+}
+
+static void clear_completed_path(void)
+{
+    completed_has_path = 0;
+    completed_path[0] = '\0';
+}
+
+static void capture_path_argument(const struct syscall_event *ev)
 {
     unsigned long addr;
 
@@ -27,10 +59,27 @@ static void capture_path_argument(struct syscall_event *ev)
         return;
     }
 
-    if (read_child_string(ev->pid, addr, ev->path, sizeof(ev->path)) < 0) {
-        snprintf(ev->path, sizeof(ev->path), "<ilegivel>");
+    if (read_child_string(ev->pid, addr, pending_path, sizeof(pending_path)) < 0) {
+        snprintf(pending_path, sizeof(pending_path), "<ilegivel>");
     }
-    ev->has_path = 1;
+    pending_path_pid = ev->pid;
+    pending_path_syscall_no = ev->syscall_no;
+    pending_has_path = 1;
+}
+
+static void publish_completed_path(const struct syscall_event *entry)
+{
+    if (entry == NULL || !pending_has_path ||
+        pending_path_pid != entry->pid ||
+        pending_path_syscall_no != entry->syscall_no) {
+        clear_completed_path();
+        return;
+    }
+
+    snprintf(completed_path, sizeof(completed_path), "%s", pending_path);
+    completed_path_pid = pending_path_pid;
+    completed_path_syscall_no = pending_path_syscall_no;
+    completed_has_path = 1;
 }
 
 int student_pair_syscall(struct syscall_pairer *pairer,
@@ -72,12 +121,15 @@ int student_pair_syscall(struct syscall_pairer *pairer,
             out->entering = 0;
             out->ret = 0;
             pairer->has_entry = 0;
+            pending_has_path = 0;
+            clear_completed_path();
             return 1;
         }
 #endif
 
         pairer->entry = *ev;
-        capture_path_argument(&pairer->entry);
+        pending_has_path = 0;
+        capture_path_argument(ev);
         pairer->has_entry = 1;
         return 0;
     }
@@ -99,10 +151,7 @@ int student_pair_syscall(struct syscall_pairer *pairer,
     out->args[3] = pairer->entry.args[3];
     out->args[4] = pairer->entry.args[4];
     out->args[5] = pairer->entry.args[5];
-    out->has_path = pairer->entry.has_path;
-    if (out->has_path) {
-        snprintf(out->path, sizeof(out->path), "%s", pairer->entry.path);
-    }
+    publish_completed_path(&pairer->entry);
 
     pairer->has_entry = 0;
     return 1;
