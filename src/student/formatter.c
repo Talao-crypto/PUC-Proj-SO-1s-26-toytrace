@@ -1,31 +1,8 @@
 #include "student_api.h"
 
 #include "syscall_names.h"
-#include "trace_helpers.h"
 
 #include <stdio.h>
-#include <sys/syscall.h>
-
-#define CHILD_STRING_BUFSZ 256
-
-const char *student_completed_path_for_event(const struct syscall_event *ev);
-
-static void load_path_or_placeholder(const struct syscall_event *ev,
-                                     unsigned long addr,
-                                     char *path,
-                                     size_t pathsz)
-{
-    const char *completed_path = student_completed_path_for_event(ev);
-
-    if (completed_path != NULL) {
-        snprintf(path, pathsz, "%s", completed_path);
-        return;
-    }
-
-    if (read_child_string(ev->pid, addr, path, pathsz) < 0) {
-        snprintf(path, pathsz, "<ilegivel>");
-    }
-}
 
 void student_debug_raw_event(const struct syscall_event *ev,
                              char *buf,
@@ -77,30 +54,38 @@ void student_format_event(const struct syscall_event *ev,
      * Para caminhos do processo monitorado, use read_child_string().
      * Se a leitura falhar, imprima "<ilegivel>".
      */
-    char path[CHILD_STRING_BUFSZ];
+    enum {
+        X86_64_SYS_READ = 0,
+        X86_64_SYS_WRITE = 1,
+        X86_64_SYS_EXECVE = 59,
+        X86_64_SYS_EXIT_GROUP = 231,
+        X86_64_SYS_OPENAT = 257
+    };
+    extern int read_child_string(pid_t pid,
+                                 unsigned long addr,
+                                 char *dest,
+                                 size_t destsz);
+    char path[256];
 
     if (ev == NULL || buf == NULL || bufsz == 0) {
         return;
     }
 
     switch (ev->syscall_no) {
-#ifdef SYS_read
-    case SYS_read:
+    case X86_64_SYS_READ:
         snprintf(buf, bufsz, "read(%d, %#lx, %lu) = %ld",
                  (int)ev->args[0], ev->args[1], ev->args[2], ev->ret);
         return;
-#endif
 
-#ifdef SYS_write
-    case SYS_write:
+    case X86_64_SYS_WRITE:
         snprintf(buf, bufsz, "write(%d, %#lx, %lu) = %ld",
                  (int)ev->args[0], ev->args[1], ev->args[2], ev->ret);
         return;
-#endif
 
-#ifdef SYS_openat
-    case SYS_openat:
-        load_path_or_placeholder(ev, ev->args[1], path, sizeof(path));
+    case X86_64_SYS_OPENAT:
+        if (read_child_string(ev->pid, ev->args[1], path, sizeof(path)) < 0) {
+            snprintf(path, sizeof(path), "<ilegivel>");
+        }
         snprintf(buf, bufsz, "openat(%d, \"%s\", %#x, %#o) = %ld",
                  (int)ev->args[0],
                  path,
@@ -108,21 +93,18 @@ void student_format_event(const struct syscall_event *ev,
                  (unsigned int)ev->args[3],
                  ev->ret);
         return;
-#endif
 
-#ifdef SYS_execve
-    case SYS_execve:
-        load_path_or_placeholder(ev, ev->args[0], path, sizeof(path));
+    case X86_64_SYS_EXECVE:
+        if (read_child_string(ev->pid, ev->args[0], path, sizeof(path)) < 0) {
+            snprintf(path, sizeof(path), "<ilegivel>");
+        }
         snprintf(buf, bufsz, "execve(\"%s\", ...) = %ld", path, ev->ret);
         return;
-#endif
 
-#ifdef SYS_exit_group
-    case SYS_exit_group:
+    case X86_64_SYS_EXIT_GROUP:
         snprintf(buf, bufsz, "exit_group(%d) = %ld",
                  (int)ev->args[0], ev->ret);
         return;
-#endif
     }
 
     snprintf(buf, bufsz, "%s(%#lx, %#lx, %#lx, %#lx, %#lx, %#lx) = %ld",
